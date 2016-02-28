@@ -20,7 +20,8 @@ public:
 			if(_buf[i] != u._buf[i]) return (_buf[i] < u._buf[i]);
 		return (_size < u._size);
 	}
-	void set(const char* b, const int& s){
+	void set(const char* b, const int s){
+		//printf("s=%d\n",s);
 		_buf = b;
 		_size = s;
 	}
@@ -72,13 +73,16 @@ private:
 class Parser {
 public:
 	Parser(char* const m): size(0), len(0), mem(m), buf(m), ptr(m) {}
-	int contiRead(const Reader& reader){
+	int contiRead(const Reader& reader, const int& mem_size){
 		buf = mem;
 		while(len--) *(buf++) = *(ptr++);
 		ptr = mem;
 		len = 0;
-		size = reader.readFile(buf, mem + MEM_SIZE - buf);
-		if(size==0) return -2;
+		size = reader.readFile(buf, mem + mem_size - buf);
+		if(size==0) {
+			size = -1;
+			return -2;
+		}
 		if(size<0){
 			fprintf(stderr, "Reader.readFile fail\n");
 			return -1;
@@ -89,7 +93,8 @@ public:
 	void next(){
 		while(size-- && ptr[len++]!='\n');
 	}
-	bool isEnd() const {return size<0; }
+	//bool isEnd() const { printf("%d\n", size); return size<0; }
+	bool isEnd() const { return size<0; }
 	const char* get_ptr(){ return ptr; }
 	int get_len() { return len; }
 	void reset_ptr() {
@@ -103,6 +108,20 @@ private:
 	char* buf;
 	const char* ptr;
 };
+
+int appendRest(Parser& parser, const Writer& writer){
+	while(!parser.isEnd()){
+		parser.next();
+		if(!parser.isEnd()){
+			if(writer.writeFile(parser.get_ptr(), parser.get_len()) < 0){
+				fprintf(stderr, "Writer.writeFile fail\n");
+				return -1;
+			}
+			parser.reset_ptr();
+		}
+	}
+	return 0;
+}
 
 
 int main(int argc, char* argv[]){
@@ -119,15 +138,18 @@ int main(int argc, char* argv[]){
 	int count = 0;
 
 	Parser parser(mem);
-	while(parser.contiRead(reader) == 0){
+	while(parser.contiRead(reader, MEM_SIZE) == 0){
 		int v_size = 0;
 		while(!parser.isEnd()){
 			parser.next();
-			v[v_size++].set(parser.get_ptr(), parser.get_len());
-			parser.reset_ptr();
+			if(!parser.isEnd()){
+				v[v_size++].set(parser.get_ptr(), parser.get_len());
+				parser.reset_ptr();
+			}
 		}
-		/*
+		//for(int i=0; i<v_size; ++i) v[i].show();
 		sort(v.begin(), v.begin()+v_size);
+		//for(int i=0; i<v_size; ++i) v[i].show();
 		{
 			Writer writer(id);
 			for(int i=0; i<v_size; ++i) 
@@ -136,6 +158,7 @@ int main(int argc, char* argv[]){
 					return -1;
 				}
 		}
+		/*
 		if(remove(id) != 0){
 			fprintf(stderr, "remove file fail\n");
 			return -1;
@@ -143,109 +166,72 @@ int main(int argc, char* argv[]){
 		++id;
 		++count;
 	}
-	/*
-	count = 3;
-	count /= 2;
-	while(count--){
-		Reader reader1(id_start);
-		++id_start;
-		Reader reader2(id_start);
-		++id_start;
-		Writer writer(id);
-		++id;
-		char *mem1 = mem;
-		const int mem_size = MEM_SIZE/2;
-		char *mem2 = mem + mem_size;
+	while(count>1){
+		for(int kk=1; kk<count; kk=kk+2) {
+			Reader reader1(id_start);
+			++id_start;
+			Reader reader2(id_start);
+			++id_start;
+			Writer writer(id);
+			++id;
 
-		int turn = 0, size1 = 0, size2 = 0;
+			const int mem_size = MEM_SIZE/2;
+			Parser parser1(mem);
+			Parser parser2(mem + mem_size);
 
-		char *buf1, *ptr1;
-		int len1 = 0;
-		char *buf2, *ptr2;
-		int len2 = 0;
-		while(1){
-			if(turn==1 || turn==0){
-				buf1 = mem1;
-				while(len1--) *(buf1++) = *(ptr1++);
-				ptr1 = mem1;
-				len1 = 0;
-				size1 = reader1.readFile(buf1, mem1 + mem_size - buf1);
-				if(size1==0) break;
-				if(size1<0){
-					fprintf(stderr, "Reader.readFile fail\n");
+			int turn = 0;
+			while(1){
+				if(turn==1 || turn==0) if(parser1.contiRead(reader1, mem_size) < 0) break;
+				if(turn==2 || turn==0) if(parser2.contiRead(reader2, mem_size) < 0) break;
+				while(!( parser1.isEnd() || parser2.isEnd() )){
+					if(turn==0) {
+						parser2.next();
+						if(!parser2.isEnd()) v[2].set(parser2.get_ptr(), parser2.get_len());
+						turn=1;
+					}
+					if(turn==1){
+						parser1.next();
+						if(!parser1.isEnd()) v[1].set(parser1.get_ptr(), parser1.get_len());
+					}
+					else{
+						parser2.next();
+						if(!parser2.isEnd()) v[2].set(parser2.get_ptr(), parser2.get_len());
+					}
+					if( (turn==1) ? !parser1.isEnd() : !parser2.isEnd() ){
+						turn = (v[1] < v[2]) ? 1 : 2; 
+						if(writer.writeFile(v[turn].get_buf(), v[turn].get_size()) < 0){
+							fprintf(stderr, "Writer.writeFile fail\n");
+							return -1;
+						}
+						v[turn].show();
+						if(turn==1) parser1.reset_ptr();
+						else parser2.reset_ptr();
+					}
+					//printf("turn=%d\n",turn);
+				}
+			}
+			if(!parser1.isEnd()) {
+				v[1].show();
+				if(writer.writeFile(v[1].get_buf(), v[1].get_size()) < 0){
+					fprintf(stderr, "Writer.writeFile fail\n");
 					return -1;
 				}
-				size1 += (buf1 - mem1);
-				printf("\nsize1=%d\n", size1);
+				parser1.reset_ptr();
+				do{ appendRest(parser1, writer);
+				}while(parser1.contiRead(reader1, mem_size) == 0);
 			}
-			if(turn==2 || turn==0){
-				buf2 = mem2;
-				while(len2--) *(buf2++) = *(ptr2++);
-				ptr2 = mem2;
-				len2 = 0;
-				size2 = reader2.readFile(buf2, mem2 + mem_size - buf2);
-				if(size2==0) break;
-				if(size2<0){
-					fprintf(stderr, "Reader.readFile fail\n");
+			else {
+				v[2].show();
+				if(writer.writeFile(v[2].get_buf(), v[2].get_size()) < 0){
+					fprintf(stderr, "Writer.writeFile fail\n");
 					return -1;
 				}
-				size2 += (buf2 - mem2);
-				printf("\nsize2=%d\n", size2);
-			}
-			while(size1 >= 0 && size2 >= 0){
-				if(turn==0) {
-					while(size2-- && ptr2[len2++]!='\n');
-					if(size2 >= 0) v[2].set(ptr2, len2);
-					turn=1;
-				}
-				if(turn==1){
-					while(size1-- && ptr1[len1++]!='\n');
-					if(size1 >= 0){
-						v[1].set(ptr1, len1);
-						if(v[1] < v[2]){
-							turn = 1;
-							v[1].show();
-							//printf("len1=%d\n", len1);
-							ptr1 += (len1);
-							len1 = 0;
-						}
-						else{
-							turn = 2;
-							v[2].show();
-							//printf("len2=%d\n", len2);
-							ptr2 += (len2);
-							len2 = 0;
-						}
-					}
-				}
-				else{
-					while(size2-- && ptr2[len2++]!='\n');
-					if(size2 >= 0){
-						v[2].set(ptr2, len2);
-						if(v[1] < v[2]){
-							turn = 1;
-							//v[1].show();
-							//printf("len1=%d\n", len1);
-							ptr1 += (len1);
-							len1 = 0;
-						}
-						else{
-							turn = 2;
-							//v[2].show();
-							//printf("len2=%d\n", len2);
-							ptr2 += (len2);
-							len2 = 0;
-						}
-					}
-				}
-				//printf("turn=%d\n",turn);
-				//printf("size1=%d\n", size1);
-				//printf("size2=%d\n", size2);
+				parser2.reset_ptr();
+				do{ appendRest(parser2, writer);
+				}while(parser2.contiRead(reader2, mem_size) == 0);
 			}
 		}
-		
-		printf("\n");
+		count = count/2 + count%2;
 	}
-	*/
 	return 0;
 }
