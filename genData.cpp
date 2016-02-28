@@ -1,6 +1,4 @@
 #include <stdio.h>
-#include <fcntl.h> // open
-#include <unistd.h> // close
 
 #include "writer.h"
 #include "rand.h"
@@ -18,6 +16,7 @@ int genLine(const Rand& rand, const Writer& writer, const int& maxColumn){
 		unsigned char c;
 		if(rand.get(&c)<0){
 			fprintf(stderr, "Rand.get fail\n");
+			delete [] buf;
 			return -1;
 		}
 		buf[i] = c%26 + 'a';
@@ -25,7 +24,8 @@ int genLine(const Rand& rand, const Writer& writer, const int& maxColumn){
 	buf[len] = '\n';
 	
 	if(writer.writeFile(buf, len+1)<0) {
-		fprintf(stderr, "Writer.write fail\n");
+		fprintf(stderr, "Writer.writeFile fail\n");
+		delete [] buf;
 		return -1;
 	}
 	delete [] buf;
@@ -52,16 +52,16 @@ int main(int argc, char* argv[]){
 		return -1;
 	}
 
-	//fprintf(stdout, "line=%d, maxColumn=%d\n", line, maxColumn);
+	fprintf(stdout, "line=%d, maxColumn=%d\n", line, maxColumn);
 	
-	Rand rand;
 	Writer writer(argv[3]);
+	Rand rand;
+
 
 	for(int i=0; i<line; ++i) 
 		if(genLine(rand, writer, maxColumn) < 0) {
 			fprintf(stderr, "getLine fail\n");
 			return -1;
 		}
-	
 	return 0;
 }
