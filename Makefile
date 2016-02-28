@@ -6,7 +6,7 @@ CFLAGS= -g -Wall -I$(IDIR)
 TARGET1 = genData
 OBJ1 = genData.o rand.o writer.o
 TARGET2 = main
-OBJ2 = main.o writer.o reader.o
+OBJ2 = main.o writer.o reader.o idIssuer.o parser.o
 TARGETS = $(TARGET1) $(TARGET2)
 
 $(TARGET2): $(OBJ2)
