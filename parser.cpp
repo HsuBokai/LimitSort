@@ -20,6 +20,7 @@ int Parser::contiRead(const Reader& reader, const int& mem_size){
 		return -1;
 	}
 	size += (buf - mem);
+	next();
 	return 0;
 }
 

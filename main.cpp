@@ -9,8 +9,8 @@ using namespace std;
 #include "idIssuer.h"
 #include "parser.h"
 
-#define MEM_SIZE 32 // (bytes)
-#define VECTOR_SIZE 32
+#define MEM_SIZE 34 // (bytes) >= (MAX_UNIT_SIZE + 1) * 2
+#define VECTOR_SIZE 34 // worst case: >= MEM_SIZE / MIN_UNIT_SIZE
 
 
 class Unit {
@@ -23,7 +23,6 @@ public:
 		return (_size < u._size);
 	}
 	void set(const char* b, const int& s){
-		//printf("s=%d\n",s);
 		_buf = b;
 		_size = s;
 	}
@@ -37,16 +36,24 @@ private:
 	int _size;
 };
 
+
+int writeOutput(const Unit& u, const Writer& writer){
+	//u.show();
+	if(writer.writeFile(u.get_buf(), u.get_size()) < 0){
+		fprintf(stderr, "Writer.writeFile fail\n");
+		return -1;
+	}
+	return 0;
+}
+
 int appendRest(Parser& parser, const Writer& writer){
 	while(!parser.isEnd()){
-		parser.next();
-		if(!parser.isEnd()){
-			if(writer.writeFile(parser.get_ptr(), parser.get_len()) < 0){
-				fprintf(stderr, "Writer.writeFile fail\n");
-				return -1;
-			}
-			parser.reset_ptr();
+		if(writer.writeFile(parser.get_ptr(), parser.get_len()) < 0){
+			fprintf(stderr, "Writer.writeFile fail\n");
+			return -1;
 		}
+		parser.reset_ptr();
+		parser.next();
 	}
 	return 0;
 }
@@ -64,51 +71,37 @@ int merge(char* const mem, const char* const in1, const char* const in2, const c
 
 	int turn = 0;
 	while(1){
-		if(turn==1 || turn==0) if(parser1.contiRead(reader1, mem_size) < 0) break;
-		if(turn==2 || turn==0) if(parser2.contiRead(reader2, mem_size) < 0) break;
-		while(!( parser1.isEnd() || parser2.isEnd() )){
-			if(turn==0) {
-				parser2.next();
-				if(!parser2.isEnd()) v[2].set(parser2.get_ptr(), parser2.get_len());
-				turn=1;
-			}
+		if(turn==1 || turn==0){
+			if(parser1.contiRead(reader1, mem_size) < 0) break;
+			if(!parser1.isEnd()) v[1].set(parser1.get_ptr(), parser1.get_len());
+		}
+		if(turn==2 || turn==0){
+			if(parser2.contiRead(reader2, mem_size) < 0) break;
+			if(!parser2.isEnd()) v[2].set(parser2.get_ptr(), parser2.get_len());
+		}
+		while( (turn==1) ? !parser1.isEnd() : !parser2.isEnd() ){
+			turn = (v[1] < v[2]) ? 1 : 2; 
+			if(writeOutput(v[turn], writer) != 0) return -1;
 			if(turn==1){
+				parser1.reset_ptr();
 				parser1.next();
 				if(!parser1.isEnd()) v[1].set(parser1.get_ptr(), parser1.get_len());
 			}
 			else{
+				parser2.reset_ptr();
 				parser2.next();
 				if(!parser2.isEnd()) v[2].set(parser2.get_ptr(), parser2.get_len());
 			}
-			if( (turn==1) ? !parser1.isEnd() : !parser2.isEnd() ){
-				turn = (v[1] < v[2]) ? 1 : 2; 
-				if(writer.writeFile(v[turn].get_buf(), v[turn].get_size()) < 0){
-					fprintf(stderr, "Writer.writeFile fail\n");
-					return -1;
-				}
-				v[turn].show();
-				if(turn==1) parser1.reset_ptr();
-				else parser2.reset_ptr();
-			}
-			//printf("turn=%d\n",turn);
 		}
 	}
 	if(!parser1.isEnd()) {
-		v[1].show();
-		if(writer.writeFile(v[1].get_buf(), v[1].get_size()) < 0){
-			fprintf(stderr, "Writer.writeFile fail\n");
-			return -1;
-		}
+		if(writeOutput(v[1], writer) != 0) return -1;
 		parser1.reset_ptr();
 		do{ if(appendRest(parser1, writer) < 0) return -1;
 		}while(parser1.contiRead(reader1, mem_size) == 0);
 	}
 	else {
-		v[2].show();
-		if(writer.writeFile(v[2].get_buf(), v[2].get_size()) < 0){
-			fprintf(stderr, "Writer.writeFile fail\n");
-			return -1;
-		}
+		if(writeOutput(v[2], writer) != 0) return -1;
 		parser2.reset_ptr();
 		do{ if(appendRest(parser2, writer) < 0) return -1;
 		}while(parser2.contiRead(reader2, mem_size) == 0);
@@ -117,8 +110,8 @@ int merge(char* const mem, const char* const in1, const char* const in2, const c
 }
 
 int main(int argc, char* argv[]){
-	if(argc < 3){
-		fprintf(stderr, "Usage: %s < input file > < output file >\n", argv[0]);
+	if(argc < 2){
+		fprintf(stderr, "Usage: %s < input file >\n", argv[0]);
 		return -1;
 	}
 	
@@ -132,23 +125,19 @@ int main(int argc, char* argv[]){
 	while(parser.contiRead(reader, MEM_SIZE) == 0){
 		int v_size = 0;
 		while(!parser.isEnd()){
+			v[v_size++].set(parser.get_ptr(), parser.get_len());
+			parser.reset_ptr();
 			parser.next();
-			if(!parser.isEnd()){
-				v[v_size++].set(parser.get_ptr(), parser.get_len());
-				parser.reset_ptr();
-			}
 		}
 		//for(int i=0; i<v_size; ++i) v[i].show();
 		sort(v.begin(), v.begin()+v_size);
 		//for(int i=0; i<v_size; ++i) v[i].show();
-		{
-			Writer writer(id);
-			for(int i=0; i<v_size; ++i) 
-				if(writer.writeFile(v[i].get_buf(), v[i].get_size()) < 0){
-					fprintf(stderr, "Writer.writeFile fail\n");
-					return -1;
-				}
-		}
+		Writer writer(id);
+		for(int i=0; i<v_size; ++i) 
+			if(writer.writeFile(v[i].get_buf(), v[i].get_size()) < 0){
+				fprintf(stderr, "Writer.writeFile fail\n");
+				return -1;
+			}
 		++id;
 		++count;
 	}
