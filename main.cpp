@@ -9,8 +9,8 @@ using namespace std;
 #include "idIssuer.h"
 #include "parser.h"
 
-#define MEM_SIZE 34 // (bytes) >= (MAX_UNIT_SIZE + 1) * 2
-#define VECTOR_SIZE 34 // worst case: >= MEM_SIZE / MIN_UNIT_SIZE
+#define MEM_SIZE 66 // (bytes) >= (MAX_UNIT_SIZE + 1) * 2
+#define VECTOR_SIZE 66 // worst case: >= MEM_SIZE / MIN_UNIT_SIZE
 
 
 class Unit {
@@ -58,12 +58,12 @@ int appendRest(Parser& parser, const Writer& writer){
 	return 0;
 }
 
-int merge(char* const mem, const char* const in1, const char* const in2, const char* const out) {
+int merge(vector<Unit>& v, char* const mem, const char* const in1, const char* const in2, const char* const out) {
 	Reader reader1(in1);
 	Reader reader2(in2);
 	Writer writer(out);
 	
-	vector<Unit> v(3);
+	//vector<Unit> v(3);
 
 	const int mem_size = MEM_SIZE/2;
 	Parser parser1(mem);
@@ -148,7 +148,7 @@ int main(int argc, char* argv[]){
 		while(iter--) {
 			id_in1 = id_in2;
 			++id_in2;
-			if( merge(mem, id_in1, id_in2, id) < 0) return -1;
+			if( merge(v, mem, id_in1, id_in2, id) < 0) return -1;
 			if(remove(id_in1) != 0){
 				fprintf(stderr, "remove file fail\n");
 				return -1;
